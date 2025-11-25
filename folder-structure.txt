@@ -1,0 +1,39 @@
+.
+├── folder-structure.txt
+├── package.json
+├── package-lock.json
+├── README.md
+└── src
+    ├── config
+    │   └── db.js
+    ├── core
+    │   ├── app.js
+    │   └── server.js
+    ├── middleware
+    │   ├── auth.middleware.js
+    │   ├── compression.middleware.js
+    │   ├── cors.middleware.js
+    │   ├── error.middleware.js
+    │   ├── index.js
+    │   ├── logger.js
+    │   ├── notFound.middleware.js
+    │   ├── rateLimiter.js
+    │   ├── requestId.js
+    │   ├── security.middleware.js
+    │   └── validation.middleware.js
+    ├── modules
+    │   └── auth
+    │       ├── auth.controller.js
+    │       ├── auth.model.js
+    │       ├── auth.routes.js
+    │       ├── auth.service.js
+    │       ├── auth.validation.js
+    │       └── index.js
+    ├── routes
+    │   └── api.routes.js
+    ├── uploads
+    └── utils
+        ├── apiResponse.js
+        └── token.js
+
+9 directories, 27 files
