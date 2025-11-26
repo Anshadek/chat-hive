@@ -2,6 +2,17 @@
 ├── folder-structure.txt
 ├── package.json
 ├── package-lock.json
+├── public
+│   ├── call.html
+│   ├── css
+│   │   ├── chat.css
+│   │   └── signin.css
+│   ├── index.html
+│   ├── js
+│   │   ├── chat.js
+│   │   └── signin.js
+│   ├── signin.html
+│   └── signup.html
 ├── README.md
 └── src
     ├── config
@@ -20,20 +31,39 @@
     │   ├── rateLimiter.js
     │   ├── requestId.js
     │   ├── security.middleware.js
+    │   ├── validateObjectId.middleware.js
     │   └── validation.middleware.js
     ├── modules
-    │   └── auth
-    │       ├── auth.controller.js
-    │       ├── auth.model.js
-    │       ├── auth.routes.js
-    │       ├── auth.service.js
-    │       ├── auth.validation.js
-    │       └── index.js
+    │   ├── auth
+    │   │   ├── auth.controller.js
+    │   │   ├── auth.model.js
+    │   │   ├── auth.routes.js
+    │   │   ├── auth.service.js
+    │   │   ├── auth.validation.js
+    │   │   └── index.js
+    │   ├── call
+    │   │   ├── call.controller.js
+    │   │   ├── call.model.js
+    │   │   ├── call.routes.js
+    │   │   ├── call.service.js
+    │   │   ├── call.validation.js
+    │   │   └── index.js
+    │   ├── message-request
+    │   │   ├──  index.js
+    │   │   ├── messageRequest.controller.js
+    │   │   ├── messageRequest.model.js
+    │   │   ├── messageRequest.routes.js
+    │   │   ├── messageRequest.service.js
+    │   │   └── messageRequest.validation.js
+    │   └── uploads
+    │       └── upload.routes.js
     ├── routes
     │   └── api.routes.js
+    ├── socket
+    │   └── index.js
     ├── uploads
     └── utils
         ├── apiResponse.js
         └── token.js
 
-9 directories, 27 files
+16 directories, 50 files

@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Chat — Voice/Image/Calls</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; display:flex; height:100vh; }
+    #sidebar { width:320px; border-right:1px solid #eee; padding:12px; box-sizing:border-box; overflow:auto;}
+    #main { flex:1; display:flex; flex-direction:column; }
+    #messages { flex:1; padding:12px; overflow:auto; background:#fafafa;}
+    .msg { margin-bottom:10px; padding:8px; border-radius:6px; max-width:70%;}
+    .msg.me { background:#d1ffd6; margin-left:auto; }
+    .msg.them { background:white; margin-right:auto; }
+    #composer { display:flex; padding:8px; gap:8px; border-top:1px solid #eee; }
+    #composer input[type="text"]{ flex:1; padding:8px;}
+    video, audio { max-width:100%; border-radius:6px; }
+    #localVideo, #remoteVideo { width:160px; height:120px; background:#000; }
+    .user-item { padding:8px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;}
+    .small { font-size:12px; color:#666;}
+  </style>
+</head>
+<body>
+
+  <div id="sidebar">
+    <h3>Contacts (Accepted)</h3>
+    <div id="contacts"></div>
+
+    <hr/>
+    <h4>Media</h4>
+    <input type="file" id="imageInput" accept="image/*"><br><br>
+    <button id="startRecording">Record Voice Note</button>
+    <button id="stopRecording" disabled>Stop</button>
+    <div id="recordings"></div>
+
+    <hr/>
+    <h4>Call Controls</h4>
+    <div>
+      <select id="callTarget"></select><br><br>
+      <button id="startAudioCall">Audio Call</button>
+      <button id="startVideoCall">Video Call</button>
+      <button id="endCall" disabled>End Call</button>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="messages"></div>
+
+    <div id="composer">
+      <input type="text" id="textMsg" placeholder="Type a message..."/>
+      <button id="sendBtn">Send</button>
+      <button id="sendImageBtn">Send Image</button>
+    </div>
+
+    <div style="display:flex; gap:12px; padding:12px; border-top:1px solid #eee;">
+      <div>
+        <div>Local</div>
+        <video id="localVideo" autoplay muted playsinline></video>
+      </div>
+      <div>
+        <div>Remote</div>
+        <video id="remoteVideo" autoplay playsinline></video>
+      </div>
+    </div>
+  </div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+/* ======= CONFIG ======= */
+const token = localStorage.getItem('token'); // earlier signin must set token
+if (!token) { alert('Not signed in. Redirecting to signin'); window.location.href = '/signin.html'; }
+
+const API_BASE = '/api';
+const socket = io('/', { auth: { token } });
+
+/* ======= UI ELEMENTS ======= */
+const contactsEl = document.getElementById('contacts');
+const callTargetSelect = document.getElementById('callTarget');
+const messagesEl = document.getElementById('messages');
+const textMsgEl = document.getElementById('textMsg');
+const sendBtn = document.getElementById('sendBtn');
+const imageInput = document.getElementById('imageInput');
+const sendImageBtn = document.getElementById('sendImageBtn');
+
+const startRecordingBtn = document.getElementById('startRecording');
+const stopRecordingBtn = document.getElementById('stopRecording');
+const recordingsEl = document.getElementById('recordings');
+
+const startAudioCallBtn = document.getElementById('startAudioCall');
+const startVideoCallBtn = document.getElementById('startVideoCall');
+const endCallBtn = document.getElementById('endCall');
+
+const localVideo = document.getElementById('localVideo');
+const remoteVideo = document.getElementById('remoteVideo');
+
+/* ======= APP STATE ======= */
+let contacts = []; // {id, name}
+let currentChatUser = null; // id
+let pc = null; // RTCPeerConnection
+let localStream = null;
+let isCallActive = false;
+let mediaRecorder = null;
+let recordedChunks = [];
+
+/* ======= HELPERS ======= */
+function appendMessage(msg, who='them') {
+  const div = document.createElement('div');
+  div.className = 'msg ' + (who === 'me' ? 'me' : 'them');
+  if (msg.type === 'text') {
+    div.textContent = `${msg.from.name || msg.from.id}: ${msg.message}`;
+  } else if (msg.type === 'image') {
+    const img = document.createElement('img');
+    img.src = msg.message;
+    img.style.maxWidth = '250px';
+    div.appendChild(img);
+  } else if (msg.type === 'audio') {
+    const aud = document.createElement('audio');
+    aud.controls = true;
+    aud.src = msg.message;
+    div.appendChild(aud);
+  }
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+/* ======= Load contacts (accepted list) ======= */
+async function loadAccepted() {
+  const res = await fetch(`${API_BASE}/message-request/accepted-list`, { headers:{ 'Authorization': 'Bearer ' + token }});
+  const data = await res.json();
+  contacts = [];
+  if (data.data && data.data.length) {
+    data.data.forEach(item => {
+      // item.sender or item.receiver depending on direction
+      const other = String(item.sender?._id) === String(item.user?._id) ? item.receiver : item.sender;
+      const contact = item.sender && item.receiver ? (item.sender._id === item.user?._id ? item.receiver : item.sender) : (item.sender || item.receiver);
+    });
+    // simple approach: map both sender and receiver possibilities
+    const seen = new Set();
+    data.data.forEach(item => {
+      const s = item.sender, r = item.receiver;
+      if (s) seen.add(JSON.stringify({ id: s._id, name: s.name || s.email || s._id }));
+      if (r) seen.add(JSON.stringify({ id: r._id, name: r.name || r.email || r._id }));
+    });
+    Array.from(seen).forEach(str => contacts.push(JSON.parse(str)));
+  }
+  // fallback: if your API returns different shape, adjust accordingly
+  renderContacts();
+}
+
+function renderContacts() {
+  contactsEl.innerHTML = '';
+  callTargetSelect.innerHTML = '';
+  contacts.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'user-item';
+    div.innerHTML = `<span>${c.name || c.id}</span>
+      <div>
+        <button onclick="openChat('${c.id}','${(c.name||'User')}')">Chat</button>
+      </div>`;
+    contactsEl.appendChild(div);
+    const opt = document.createElement('option');
+    opt.value = c.id; opt.textContent = c.name || c.id;
+    callTargetSelect.appendChild(opt);
+  });
+}
+
+/* ========== TEXT MESSAGES ========= */
+sendBtn.addEventListener('click', async () => {
+  if (!currentChatUser) return alert('Select a user to chat with');
+  const txt = textMsgEl.value.trim();
+  if (!txt) return;
+  const payload = { toUserId: currentChatUser, type: 'text', message: txt };
+  socket.emit('send-message', payload);
+  appendMessage({ from: { name: 'You' }, message: txt, type:'text' }, 'me');
+  textMsgEl.value = '';
+});
+
+/* receive message */
+socket.on('receive-message', (msg) => {
+  // if message is from currently open chat partner, show it
+  if (!currentChatUser) {
+    // show notification or ignore
+  }
+  appendMessage(msg, 'them');
+});
+
+/* ack */
+socket.on('message-sent', (msg) => {
+  // could update UI delivered state
+});
+
+/* ========== IMAGE UPLOAD & SEND (via REST upload) ========= */
+sendImageBtn.addEventListener('click', async () => {
+  if (!currentChatUser) return alert('Select user first');
+  const file = imageInput.files[0];
+  if (!file) return alert('Choose an image first');
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch(`${API_BASE}/uploads/file`, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token },
+    body: fd
+  });
+  const data = await res.json();
+  if (data.status && data.url) {
+    const imageUrl = data.url;
+    socket.emit('send-message', { toUserId: currentChatUser, type: 'image', message: imageUrl, meta: { filename: data.filename } });
+    appendMessage({ from: { name: 'You' }, message: imageUrl, type:'image' }, 'me');
+  } else {
+    alert('Upload failed');
+  }
+});
+
+/* ========== VOICE NOTE RECORDING ========= */
+startRecordingBtn.addEventListener('click', async () => {
+  startRecordingBtn.disabled = true;
+  stopRecordingBtn.disabled = false;
+  recordedChunks = [];
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  mediaRecorder = new MediaRecorder(stream);
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+  mediaRecorder.onstop = async () => {
+    const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+    const fd = new FormData();
+    fd.append('file', blob, 'voice.webm');
+    const res = await fetch(`${API_BASE}/uploads/file`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token },
+      body: fd
+    });
+    const data = await res.json();
+    if (data.status && data.url) {
+      const audioUrl = data.url;
+      socket.emit('send-message', { toUserId: currentChatUser, type: 'audio', message: audioUrl });
+      appendMessage({ from: { name: 'You' }, message: audioUrl, type:'audio' }, 'me');
+    } else alert('Upload failed');
+  };
+  mediaRecorder.start();
+});
+
+stopRecordingBtn.addEventListener('click', () => {
+  stopRecordingBtn.disabled = true;
+  startRecordingBtn.disabled = false;
+  mediaRecorder?.stop();
+});
+
+/* ========== CALLS (WebRTC) ========= */
+const pcConfig = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' }
+    // include TURN in production
+  ]
+};
+
+startAudioCallBtn.addEventListener('click', () => startCall('audio'));
+startVideoCallBtn.addEventListener('click', () => startCall('video'));
+endCallBtn.addEventListener('click', endCall);
+
+async function startCall(type) {
+  const target = callTargetSelect.value;
+  if (!target) return alert('Select call target');
+  currentChatUser = target;
+  // get media
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' });
+    localVideo.srcObject = localStream;
+  } catch (err) {
+    return alert('Could not get media: ' + err.message);
+  }
+
+  pc = new RTCPeerConnection(pcConfig);
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  pc.ontrack = (ev) => {
+    remoteVideo.srcObject = ev.streams[0];
+  };
+  pc.onicecandidate = (ev) => {
+    if (ev.candidate) socket.emit('ice-candidate', { roomId: currentCallRoom, targetUserId: currentChatUser, candidate: ev.candidate });
+  };
+
+  // create offer
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  // initiate call via server
+  socket.emit('call-initiate', { calleeId: currentChatUser, type });
+  socket.once('call-initiated', async ({ roomId }) => {
+    currentCallRoom = roomId;
+    socket.emit('call-offer', { roomId, targetUserId: currentChatUser, sdp: offer });
+  });
+
+  isCallActive = true;
+  endCallBtn.disabled = false;
+}
+
+/* Receiving incoming call */
+let currentCallRoom = null;
+socket.on('incoming-call', async ({ roomId, callerId, type }) => {
+  // simple auto-accept flow: show confirm
+  const accept = confirm('Incoming ' + type + ' call from ' + callerId + '. Accept?');
+  if (!accept) {
+    socket.emit('call-reject', { roomId, targetUserId: callerId });
+    return;
+  }
+  currentChatUser = callerId;
+  currentCallRoom = roomId;
+
+  // get media
+  const media = { audio:true, video: type === 'video' };
+  localStream = await navigator.mediaDevices.getUserMedia(media);
+  localVideo.srcObject = localStream;
+
+  pc = new RTCPeerConnection(pcConfig);
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  pc.ontrack = ev => remoteVideo.srcObject = ev.streams[0];
+  pc.onicecandidate = ev => {
+    if (ev.candidate) socket.emit('ice-candidate', { roomId, targetUserId: callerId, candidate: ev.candidate });
+  };
+});
+
+/* when callee receives an offer */
+socket.on('call-offer', async ({ roomId, from, sdp }) => {
+  // ensure pc exists (created after incoming-call)
+  if (!pc) {
+    // fallback: create pc and add localStream if not present
+    pc = new RTCPeerConnection(pcConfig);
+    if (localStream) localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+    pc.ontrack = ev => remoteVideo.srcObject = ev.streams[0];
+    pc.onicecandidate = ev => {
+      if (ev.candidate) socket.emit('ice-candidate', { roomId, targetUserId: from, candidate: ev.candidate });
+    };
+  }
+  await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  socket.emit('call-answer', { roomId, targetUserId: from, sdp: answer });
+  // mark call active
+  isCallActive = true;
+  endCallBtn.disabled = false;
+});
+
+/* caller gets answer */
+socket.on('call-answer', async ({ roomId, from, sdp }) => {
+  await pc?.setRemoteDescription(new RTCSessionDescription(sdp));
+  isCallActive = true;
+  endCallBtn.disabled = false;
+});
+
+/* ICE candidates */
+socket.on('ice-candidate', async ({ from, candidate }) => {
+  try {
+    if (pc) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+  } catch (err) { console.error('ICE add failed', err); }
+});
+
+/* call reject/end */
+socket.on('call-reject', ({ roomId }) => {
+  alert('Call rejected');
+  cleanupCall();
+});
+socket.on('call-end', ({ roomId }) => {
+  alert('Call ended');
+  cleanupCall();
+});
+
+function endCall() {
+  socket.emit('call-end', { roomId: currentCallRoom, targetUserId: currentChatUser });
+  cleanupCall();
+}
+
+function cleanupCall() {
+  isCallActive = false;
+  endCallBtn.disabled = true;
+  try { pc?.close(); pc = null; } catch(e){}
+  try { localStream?.getTracks()?.forEach(t=>t.stop()); localStream = null; } catch(e){}
+  localVideo.srcObject = null;
+  remoteVideo.srcObject = null;
+  currentCallRoom = null;
+}
+
+/* ========== Startup ========== */
+(async () => {
+  await loadAccepted();
+  // Optionally auto-select first contact
+  if (contacts.length) {
+    currentChatUser = contacts[0].id;
+  }
+})();
+</script>
+</body>
+</html>

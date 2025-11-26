@@ -31,8 +31,10 @@ export default function registerMiddlewares(app) {
     // Logger
     app.use(logger);
 
+
+
     // 404 Handler
-   // app.use(notFoundHandler);
+    // app.use(notFoundHandler);
 
     // Error Handler (last middleware)
     app.use(errorHandler);

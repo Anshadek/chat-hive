@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Chat Dashboard</title>
+
+  <!-- CSS (served from /public/css/chat.css) -->
+  <link rel="stylesheet" href="/css/chat.css">
+
+  <!-- socket.io client (served by your server) -->
+  <script src="/socket.io/socket.io.js"></script>
+
+  <!-- main JS (served from /public/js/chat.js) -->
+  <script defer src="/js/chat.js"></script>
+</head>
+<body>
+  <div class="wrap">
+
+    <!-- Left column: tabs + lists -->
+    <aside class="left">
+      <div class="tabs">
+        <button class="tab active" data-tab="approved">Approved</button>
+        <button class="tab" data-tab="pending">Pending</button>
+        <button class="tab" data-tab="rejected">Rejected</button>
+      </div>
+
+      <div class="list-header">
+        <input id="searchInput" placeholder="Search users..." />
+        <button id="refreshBtn" title="Refresh lists">↻</button>
+      </div>
+
+      <div id="listContainer" class="list">
+        <!-- User rows injected here -->
+      </div>
+    </aside>
+
+    <!-- Right column: chat + call -->
+    <main class="main">
+      <header class="header">
+        <div class="meta">
+          <div id="activeName" class="activeName">Select a contact</div>
+          <div id="activeStatus" class="activeStatus">No conversation</div>
+        </div>
+        <div class="call-controls">
+          <button id="videoCallBtn" title="Start video call" disabled>📹 Video</button>
+          <button id="audioCallBtn" title="Start audio call" disabled>🎧 Audio</button>
+          <button id="endCallBtn" title="End call" disabled>⛔ End</button>
+        </div>
+      </header>
+
+      <section id="messages" class="messages">
+        <!-- messages injected -->
+      </section>
+
+      <footer class="composer">
+        <div class="composer-left">
+          <input id="messageInput" placeholder="Type a message..." />
+          <input id="fileInput" type="file" accept="image/*" style="display:none" />
+          <button id="imageBtn" title="Attach image">📷</button>
+          <button id="recordBtn" title="Record voice note">🎙️</button>
+        </div>
+        <div class="composer-right">
+          <button id="sendBtn">Send</button>
+        </div>
+      </footer>
+
+      <!-- Local and Remote video preview (hidden until call) -->
+      <div id="callOverlay" class="call-overlay hidden">
+        <div class="call-panel">
+          <video id="remoteVideo" autoplay playsinline></video>
+          <video id="localVideo" autoplay muted playsinline class="localVideo"></video>
+          <div class="call-actions">
+            <button id="muteBtn">Mute</button>
+            <button id="hangupBtn">Hang Up</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

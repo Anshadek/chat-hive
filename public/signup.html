@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Sign Up</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .box {
+      width: 350px;
+      background: white;
+      padding: 25px;
+      border-radius: 10px;
+      box-shadow: 0px 0px 10px rgba(0,0,0,0.2);
+    }
+    input {
+      width: 100%;
+      padding: 12px;
+      margin-top: 10px;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      background: #4CAF50;
+      color: white;
+      margin-top: 15px;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    a { text-decoration: none; display: block; margin-top: 10px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h2>Create Account</h2>
+
+    <input type="text" id="name" placeholder="Name" />
+    <input type="email" id="email" placeholder="Email" />
+    <input type="password" id="password" placeholder="Password" />
+
+    <button onclick="signup()">Sign Up</button>
+    <a href="signin.html">Already have an account? Login</a>
+    <p id="msg" style="color:red;margin-top:8px;"></p>
+  </div>
+
+<script>
+async function signup() {
+  const name = document.getElementById('name').value.trim();
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value.trim();
+  const msg = document.getElementById('msg');
+
+  if (!name || !email || !password) {
+    msg.textContent = "All fields are required";
+    return;
+  }
+
+  const res = await fetch('/api/auth/signup', {
+    method: 'POST',
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, email, password })
+  });
+
+  const data = await res.json();
+
+  if (!data.status) {
+    msg.textContent = data.message || "Signup failed";
+    return;
+  }
+
+  alert("Account created successfully!");
+  window.location.href = "signin.html";
+}
+</script>
+</body>
+</html>
